@@ -7,4 +7,4 @@ Existing commands:
 
 install
 
-env:<environment>
+env:[environment]
