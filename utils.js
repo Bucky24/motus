@@ -19,7 +19,8 @@ if (!fs.existsSync(motusCacheDir)) {
 module.exports = {
 	DIRS: {
 		MAIN_DIR: motusDir,
-		CACHE_DIR: motusCacheDir
+		CACHE_DIR: motusCacheDir,
+		MANIFEST_FILE: motusCacheDir + "/manifest"
 	},
 	getPackage: (cwd) => {
 		const pathToPackage = cwd + "/package.json";
@@ -35,7 +36,7 @@ module.exports = {
 		try {
 			json = JSON.parse(packageJson);
 		} catch (e) {
-			console.error("Package.json contains invalid JSON");
+			console.error("Package.json contains invalid JSON", e);
 			process.exit(1);
 		}
 		return json;
