@@ -3,7 +3,7 @@ const path = require('path');
 
 const { DIRS, getPackage } = require('./utils.js');
 
-const install = require('./commands/install.js');
+const { install } = require('./commands/install.js');
 const babel = require('./commands/babel.js');
 
 const cwd = path.resolve("./");
