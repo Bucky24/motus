@@ -19,10 +19,10 @@ Imagine you have a project that relies on module A and module C. Module A also r
 
 ```node\_modules
     |- A
-	    |- node\_modules
-		   |- B
-			  |- node\_modules
-			     |- C
+       |- node\_modules
+           |- B
+              |- node\_modules
+                 |- C
     |- C
 ```	
 motus will do something like so:
