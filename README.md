@@ -25,6 +25,10 @@ To run babel over a project:
 
     motus babel
 
+To do both in one sitting:
+
+    motus env:development install babel
+
 The command system is meant to be very easy to use and to get projects off the ground quickly without having to set up larger systems like webpack.
 
 # Benefits over NPM
