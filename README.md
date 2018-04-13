@@ -18,7 +18,7 @@ The first major benefit over npm is that motus does not place packages inside th
 Imagine you have a project that relies on module A and module C. Module A also relies on module B which ALSO relies on module C. The way npm installs packages, you'll get something like this:
 
 ```node\_modules
-	|- A
+    |- A
 	    |- node\_modules
 		   |- B
 			  |- node\_modules
@@ -30,17 +30,17 @@ motus will do something like so:
 cache
    |- A
        | - node\_modules
-	       |- B (symlink)
+           |- B (symlink)
    |- B
        | - node\_modules
-	       |- C (symlink)
+           |- C (symlink)
    |- C
 ```
 and in the project:
 ```
 node\_modules
     |- A (symlink)
-	|- B (symlink)
+    |- B (symlink)
 ```	
 This may not seem like a huge deal, but it adds up. As an example, Creating a test project that has babel-cli as a dependency, installed via npm, creates a node\_modules directory that is 28 MB.
 
