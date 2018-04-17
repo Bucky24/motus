@@ -140,7 +140,7 @@ module.exports = {
 			}
 		} else {
 			const normalVersion = /^([0-9]+\.){2}[0-9]+$/;
-			const greaterVersion = /^\^([0-9]+\.){2}[0-9]+$/;
+			const greaterVersion = /^\^([0-9]+\.){1,2}[0-9]+$/;
 			const extra = /^([0-9]+\.){2}[0-9]+\-.*?$/;
 			const approxVersion = /^\~([0-9]+\.){2}[0-9]+$/;
 			const approxVersionExtra = /^\~([0-9]+\.){2}[0-9]+\-.*?$/;
@@ -149,13 +149,26 @@ module.exports = {
 			const doubleNumberFormat = /^[0-9]+\.[0-9]+$/;
 			const equalsFormat = /^\=[ ]*(([0-9]+\.){2}[0-9]+)$/;
 			const orFormat = /^([0-9])[ ]*\|\|/;
+			const dashFormat = /^([0-9.]+)[ ]*\-[ ]*([0-9.]+)$/;
+			const inequalityFormat = /^([=<>]+)[ ]*([0-9.]+)[ ]([=<>]+)[ ]*([0-9.]+)$/;
+			const xFormat = /^([0-9.]+)[.x]+$/;
+			
+			const padFormat = (initial) => {
+				if (singleNumberFormat.test(initial)) {
+					return initial + ".0.0";
+				} else if (doubleNumberFormat.test(initial)) {
+					return initial + ".0";
+				} else {
+					return initial;
+				}
+			}
 
 			type = 'numeric';
 			if (normalVersion.test(version) || extra.test(version)) {
 				versionData.version = version;
 			} else if (greaterVersion.test(version)) {
 				//console.log("version is greater");
-				versionData.version = version.substring(1);
+				versionData.version = padFormat(version.substring(1));
 				versionData.allowGreater = true;
 				//console.log(versionData.version);
 			} else if (approxVersion.test(version) || approxVersionExtra.test(version)) {
@@ -167,10 +180,10 @@ module.exports = {
 				versionData.allowGreater = true;
 			} else if (singleNumberFormat.test(version)) {
 				versionData.version = version + ".0.0";
-				versionData.greater = true;
+				versionData.allowGreater = true;
 			} else if (doubleNumberFormat.test(version)) {
 				versionData.version = version + ".0";
-				versionData.greater = true;
+				versionData.allowGreater = true;
 			} else if (equalsFormat.test(version)) {
 				const matches = version.match(equalsFormat);
 				versionData.version = matches[1];
@@ -179,13 +192,35 @@ module.exports = {
 				version = matches[1];
 				if (singleNumberFormat.test(version)) {
 					versionData.version = version + ".0.0";
-					versionData.greater = true;
+					versionData.allowGreater = true;
 				} else if (doubleNumberFormat.test(version)) {
 					versionData.version = version + ".0";
-					versionData.greater = true;
+					versionData.allowGreater = true;
 				}
+			} else if (dashFormat.test(version)) {
+				const matches = version.match(dashFormat);
+				versionData.version = padFormat(matches[1]);
+			} else if (inequalityFormat.test(version)) {
+				const matches = version.match(inequalityFormat);
+				const ineq1 = matches[1];
+				const num1 = padFormat(matches[2]);
+				const ineq2 = matches[3];
+				const num2 = padFormat(matches[4]);
+				// Right now ignore the second part, will be important later though
+				if (ineq1 === ">=") {
+					versionData.version = num1;
+					versionData.allowGreater = true;
+				} else {
+					throw new Error("Unhandled inequality: " + version);
+				}
+			} else if (xFormat.test(version)) {
+				const matches = version.match(xFormat);
+				versionData.version = padFormat(matches[1]);
+			} else if (version === "*") { 
+				versionData.version = "0.0.0";
+				versionData.allowGreater = true;
 			} else {
-				throw new Error(key + " Unknown version format " + version);
+				throw new Error("Unknown version format " + version);
 				return;
 			}
 		}
