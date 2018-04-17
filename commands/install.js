@@ -180,6 +180,12 @@ const installModule = (key, version) => {
 				versionData
 			} = processVersion(version);
 			
+			const handleExistingInstallation = (cwd) => {
+				install(cwd).then(() => {
+					resolve([cwd, key]);
+				});
+			};
+			
 			//console.log(versionData);
 			
 			const packageCacheDir = CACHE_DIR + "/" + key;
@@ -189,7 +195,7 @@ const installModule = (key, version) => {
 			 	let versionCacheDir = packageCacheDir + "/" + versionData.version;
 				if (fs.existsSync(versionCacheDir)) {
 					console.log('Found existing installation');
-					resolve([versionCacheDir, key]);
+					handleExistingInstallation(versionCacheDir);
 				} else {
 					console.log("Fetching module");
 					getModuleFromNpm(key, versionData).then((actualVersion) => {
@@ -220,7 +226,7 @@ const installModule = (key, version) => {
 							const version = str[2];
 							console.log("Found existing installation:", version);
 					 		const versionCacheDir = packageCacheDir + "/" + version;
-							resolve([versionCacheDir, key]);
+							handleExistingInstallation(versionCacheDir);
 							handled = true;
 							break;
 						}
@@ -291,7 +297,7 @@ const install = (cwd, environment) => {
 			const version = json.version;
 			chain.push(name + "<=>" + version);
 			
-			console.log("chain is", chain);
+			console.log("Chain is", chain);
 			
 			console.log("Installing module", name);
 			
