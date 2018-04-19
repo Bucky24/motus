@@ -26,7 +26,7 @@ const getTarball = (tarball, key) => {
 	         }).on('end', function(){
 	             file.end();
 				 file.on('finish', () => {
-		             console.log(key, 'Download complete');
+		             //console.log(key, 'Download complete');
 			 
 					 const packageCacheDir = CACHE_DIR + "/" + key;
 					 if (!fs.existsSync(packageCacheDir)) {
@@ -36,16 +36,19 @@ const getTarball = (tarball, key) => {
 					 if (!fs.existsSync(MAIN_DIR + "/" + key + ".tgz")) {
 						 console.log('Tarball does not exist');
 					 }
+					 
+					 // clear out package just in case
+					 execSync('rm -rf ' + MAIN_DIR + "/package");
 				 
 					 // get existing list of items in main_dir for comparison
 					 const previousFiles = fs.readdirSync(MAIN_DIR, 'utf8');
-					 console.log(previousFiles);
+					 //console.log(previousFiles);
 
 					 exec("cd " + MAIN_DIR + " ; tar -xvzf " + key + ".tgz", () => {
-						 console.log("Untarred file...");
+						 //console.log("Untarred file...");
 					 
 						 const currentFiles = fs.readdirSync(MAIN_DIR, 'utf8');
-						 console.log(currentFiles);
+						 //console.log(currentFiles);
 					 
 						 const newFiles = [];
 						 currentFiles.forEach((file) => {
@@ -84,7 +87,7 @@ const getTarball = (tarball, key) => {
 							 exec("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir, () => {
 								 // Cleanup just in case
 								 exec("rm -rf " + MAIN_DIR + "/" + extractedFolder, () => {
-									 console.log('dir after moving', fs.readdirSync(MAIN_DIR, 'utf8'));
+									 //console.log('dir after moving', fs.readdirSync(MAIN_DIR, 'utf8'));
 								 	 install(versionCacheDir).then(() => {
 									 	resolve(version)
 									 });
@@ -105,7 +108,7 @@ const getModuleFromNpm = (key, version) => {
 	return Promise.resolve()
 	.then(() => {
 		return new Promise((resolve, reject) => {
-			console.log('https://registery.npmjs.org/' + key);
+			//console.log('https://registery.npmjs.org/' + key);
 			const request = https.request({
 				hostname: 'registry.npmjs.org',
 				path: '/' + key,
@@ -118,9 +121,9 @@ const getModuleFromNpm = (key, version) => {
 			    });
 				res.on('end', () => {
 					const response = JSON.parse(body);
-					console.log("Got module data from npm");
+					//console.log("Got module data from npm");
 					if (!response.versions) {
-						console.error("No version data!");
+						console.error("No version data from npm!");
 						resolve();
 						return;
 					}
@@ -140,12 +143,12 @@ const getModuleFromNpm = (key, version) => {
 						}
 						if (valid) {
 							const versionData = response.versions[availableVersion];
-							console.log('Found required version');
+							//console.log('Found required version');
 							if (versionData.dist) {
 								const tarball = versionData.dist.tarball;
-								console.log('Downloading from', tarball);
+								//console.log('Downloading from', tarball);
 								getTarball(tarball, key).then((actualVersion) => {
-									console.log(key, "Tarball fetch compelete");
+									//console.log(key, "Tarball fetch compelete");
 									resolve(actualVersion);
 								});
 							}
@@ -171,7 +174,7 @@ const getModuleFromNpm = (key, version) => {
 }
 
 const installModule = (key, version) => {
-	console.log("Attempting to install module",key,version);
+	//console.log("Attempting to install module",key,version);
 	return Promise.resolve()
 	.then(() => {
 		return new Promise((resolve, reject) => {
@@ -191,31 +194,31 @@ const installModule = (key, version) => {
 			const packageCacheDir = CACHE_DIR + "/" + key;
 	
 			if (type === "numeric") {
-				console.log("Handling dependency", key + " with version " + versionData.version);
+				//console.log("Handling dependency", key + " with version " + versionData.version);
 			 	let versionCacheDir = packageCacheDir + "/" + versionData.version;
 				if (fs.existsSync(versionCacheDir)) {
-					console.log('Found existing installation');
+					//console.log('Found existing installation');
 					handleExistingInstallation(versionCacheDir);
 				} else {
-					console.log("Fetching module");
+					//console.log("Fetching module");
 					getModuleFromNpm(key, versionData).then((actualVersion) => {
-						console.log(key, 'Finished installing module from npm');
+						//console.log(key, 'Finished installing module from npm');
 					 	versionCacheDir = packageCacheDir + "/" + actualVersion;
 						resolve([versionCacheDir, key]);
 					}).catch((e) => {
-						console.error(key, "Installing dependency failed");
+						//console.error(key, "Installing dependency failed");
 						reject();
 					});
 				}
 			} else if (type === 'url') {
 				const url = versionData.url;
-				console.log("Handling dependency", key,"with url",url);
+				//console.log("Handling dependency", key,"with url",url);
 				const urlSplit = url.split(".");
 				const ending = urlSplit[urlSplit.length-1];
 
 				let handled = false;
 				if (fs.existsSync(MANIFEST_FILE)) {
-					console.log("Searching manifest for existing entry...");
+					//console.log("Searching manifest for existing entry...");
 					let manifest = fs.readFileSync(MANIFEST_FILE, 'utf8');
 					//console.log(manifest);
 					manifest = manifest.split("\n");
@@ -224,7 +227,7 @@ const installModule = (key, version) => {
 						//console.log(str);
 						if (str[0] === url && str[1] === key) {
 							const version = str[2];
-							console.log("Found existing installation:", version);
+							//console.log("Found existing installation:", version);
 					 		const versionCacheDir = packageCacheDir + "/" + version;
 							handleExistingInstallation(versionCacheDir);
 							handled = true;
@@ -238,39 +241,44 @@ const installModule = (key, version) => {
 				}
 		
 				if (ending === "tgz") {
-					console.log("Treating as a tarball");
+					//console.log("Treating as a tarball");
 					getTarball(version, key).then((version) => {
 						//console.log(version);
 				 		const versionCacheDir = packageCacheDir + "/" + version;
 				
 						// adding to manifest
-						console.log("Adding to manifest");
+						c//onsole.log("Adding to manifest");
 						fs.appendFileSync(MANIFEST_FILE, url + "<=>" + key + "<=>" + version + "\n");
 				
 						resolve([versionCacheDir, key]);
 					});
 				} else {
-					console.log("Don't know how to handle this");
+					//console.log("Don't know how to handle this");
 				}
 			} else if (type === "git") {
-				//console.log(versionData);
+				//console.log("Cloning from git repo " + versionData.url);
 				let command = "git clone --depth 1 " + versionData.url + " " + MAIN_DIR + "/package";
 				if (versionData.branch) {
 					command += " -b " + versionData.branch;
 				};
 				//console.log(command);
 				exec("rm -rf " + MAIN_DIR + "/package", () => {
+					if (!fs.existsSync(packageCacheDir)) {
+						execSync('mkdir ' + packageCacheDir);
+					}
 					exec(command, (err) => {
-						console.log(err);
 						const extractedFolder = "package";
 						const json = getPackage(MAIN_DIR + "/" + extractedFolder);
 						if (!json) {
 							console.log("No json in git repo!");
 							process.exit(1);
 						}
+
 						const version = json.version;
 						const versionCacheDir = packageCacheDir + "/" + version;
+						//console.log("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir);
 						exec("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir, () => {
+							//console.log('moving folder to ',versionCacheDir);
 							exec("rm -rf " + MAIN_DIR + "/" + extractedFolder, () => {
 							 	install(versionCacheDir).then(() => {
 									resolve(version)
@@ -295,11 +303,26 @@ const install = (cwd, environment) => {
 			
 			const name = json.name || cwd;
 			const version = json.version;
-			chain.push(name + "<=>" + version);
+			const key = name + "<=>" + version;
 			
-			console.log("Chain is", chain);
+			let tab = '';
+			for (var i=0;i<chain.length;i++) {
+				tab += '  ';
+			}
 			
-			console.log("Installing module", name);
+			if (chain.includes(key)) {
+				console.log(tab, "Module " + name + " already found in chain, skipping");
+				resolve();
+				return;
+			}
+			chain.push(key);
+			tab += '  ';
+			
+			const top = chain.length <= 2;
+			
+			//console.log("Chain is", chain);
+			
+			if (top) console.log(tab,"Installing module", name);
 			
 			let fullDeps = {
 				...json.dependencies
@@ -310,7 +333,7 @@ const install = (cwd, environment) => {
 					...json.devDependencies
 				}
 			}
-			console.log("Got dependencies", JSON.stringify(fullDeps, null, 4));
+			//console.log("Got dependencies", JSON.stringify(fullDeps, null, 4));
 			//console.log(json);
 			const nodeDir = cwd + "/node_modules";
 			exec("rm -rf " + nodeDir, () => {
@@ -331,10 +354,15 @@ const install = (cwd, environment) => {
 				 };
 			
 				const installDependency = () => {
+					if (top) {
+						console.log(tab, name + " dependencies left: " + dependencyKeys.length);
+					}
 					//console.log(dependencyKeys);
 					if (dependencyKeys.length === 0) {
 						// all done!
-					 	console.log('Installation of ' + name + " complete!");
+					 	if (top) {
+							console.log(tab, 'Installation of ' + name + " complete!");
+						}
 						resolve();
 						return;
 					}
@@ -361,7 +389,7 @@ const install = (cwd, environment) => {
 			});
 		});
 	}).then(() => {		
-		console.log('About to link binaries');
+		//console.log('About to link binaries');
 		return Promise.resolve()
 		.then(() => {		
 			// copy any bin folders
@@ -369,7 +397,7 @@ const install = (cwd, environment) => {
 			const name = json.name || cwd;
 			
 			if (json.bin) {
-				console.log("Linking binaries for " + name);
+				//console.log("Linking binaries for " + name);
 				
 				let objects = json.bin;
 							
@@ -381,7 +409,7 @@ const install = (cwd, environment) => {
 					};
 				}
 				
-				console.log(objects);
+				//console.log(objects);
 			
 				return new Promise((resolve) => {
 					const binKeys = Object.keys(objects);
@@ -390,7 +418,7 @@ const install = (cwd, environment) => {
 				
 					const copyBin = () => {
 						if (binKeys.length === 0) {
-							console.log('Done');
+							//console.log('Done');
 							resolve();
 							return;
 						}
@@ -411,7 +439,7 @@ const install = (cwd, environment) => {
 			}
 		});
 	}).then(() => {
-		console.log(cwd, MAIN_DIR, cwd.indexOf(MAIN_DIR));
+		//console.log(cwd, MAIN_DIR, cwd.indexOf(MAIN_DIR));
 		if (cwd.indexOf(MAIN_DIR) !== 0) {
 			return;
 		}
@@ -440,7 +468,7 @@ const install = (cwd, environment) => {
 			const version2 = realVersion.versionData.version;
 			const comparitor = versionCompare(highest, version2);
 			
-			console.log(highest, version2, comparitor);
+			//console.log(highest, version2, comparitor);
 			
 			if (comparitor === 1) {
 				highest = version2;

@@ -100,7 +100,7 @@ module.exports = {
 				if (!inQuotes) {
 					const forwardString = contents.substr(i, 7);
 					if (forwardString === 'require') {
-						console.log('require!');
+						//console.log('require!');
 						let pos1 = false;
 						let pos2 = false;
 						for (j=i;j<contents.length;j++) {
@@ -112,9 +112,9 @@ module.exports = {
 								break;
 							}
 						}
-						console.log(pos1, pos2);
+						//console.log(pos1, pos2);
 						const str = contents.substring(pos1+1, pos2);
-						console.log(str);
+						//console.log(str);
 						const firstChar = str.charAt(0);
 						if (firstChar === str.charAt(str.length-1) && (firstChar === '"' || firstChar === "'")) {
 							console.log('got a string here');
@@ -125,19 +125,38 @@ module.exports = {
 		}
 	},
 	processVersion: (version) => {
-		let versionData = {};
-		if (version.substring(0,4) === "http") {
-			type = 'url';
-			versionData.url = version;
-		} else if (version.substring(0,3) === "git") {
-			type = 'git';
+		const getGit = (url) => {
 			const split = version.split("#");
 			if (split.length > 1) {
-				versionData.branch = split[1];
-				versionData.url = split[0];
+				return {
+					branch: split[1],
+					url: split[0]
+				};
 			} else {
-				versionData.url = split[0];
+				return {
+					url: split[0]
+				}
 			}
+		}
+		
+		let versionData = {};
+		if (version.substring(0,4) === "http") {
+			if (version.indexOf('https://github.com/') === 0) {
+				type = 'git';
+				versionData = {
+					...versionData,
+					...getGit(version)
+				};
+			} else {
+				type = 'url';
+				versionData.url = version;
+			}
+		} else if (version.substring(0,3) === "git") {
+			type = 'git';
+			versionData = {
+				...versionData,
+				...getGit(version)
+			};
 		} else {
 			const normalVersion = /^([0-9]+\.){2}[0-9]+$/;
 			const greaterVersion = /^\^([0-9]+\.){1,2}[0-9]+$/;
@@ -149,9 +168,9 @@ module.exports = {
 			const doubleNumberFormat = /^[0-9]+\.[0-9]+$/;
 			const equalsFormat = /^\=[ ]*(([0-9]+\.){2}[0-9]+)$/;
 			const orFormat = /^([0-9])[ ]*\|\|/;
-			const dashFormat = /^([0-9.]+)[ ]*\-[ ]*([0-9.]+)$/;
+			const dashFormat = /^([0-9.xX]+)[ ]*\-[ ]*([0-9.xX]+)$/;
 			const inequalityFormat = /^([=<>]+)[ ]*([0-9.]+)[ ]([=<>]+)[ ]*([0-9.]+)$/;
-			const xFormat = /^([0-9.]+)[.x]+$/;
+			const xFormat = /^([0-9.]+)[.xX]+$/;
 			
 			const padFormat = (initial) => {
 				if (singleNumberFormat.test(initial)) {
@@ -199,7 +218,9 @@ module.exports = {
 				}
 			} else if (dashFormat.test(version)) {
 				const matches = version.match(dashFormat);
-				versionData.version = padFormat(matches[1]);
+				const externalData = module.exports.processVersion(matches[1]);
+				//console.log(externalData);
+				versionData.version = externalData.versionData.version;
 			} else if (inequalityFormat.test(version)) {
 				const matches = version.match(inequalityFormat);
 				const ineq1 = matches[1];
