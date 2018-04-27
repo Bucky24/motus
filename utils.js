@@ -31,13 +31,18 @@ if (fs.existsSync(homeDir + "/node_modules")) {
 }
 execSync("ln -s " + motusNodeDir + "" + " " + homeDir + "/node_modules ");
 
+if (!fs.existsSync(motusCacheDir + '/installed')) {
+	execSync("touch " + motusCacheDir + '/installed');
+}
+
 module.exports = {
 	DIRS: {
 		MAIN_DIR: motusDir,
 		CACHE_DIR: motusCacheDir,
 		MANIFEST_FILE: motusCacheDir + "/manifest",
 		BIN_DIR: motusBinDir,
-		NODE_DIR: motusNodeDir
+		NODE_DIR: motusNodeDir,
+		PACKAGE_FILE: motusCacheDir + '/installed'
 	},
 	getPackage: (cwd) => {
 		const pathToPackage = cwd + "/package.json";
@@ -145,7 +150,8 @@ module.exports = {
 				type = 'git';
 				versionData = {
 					...versionData,
-					...getGit(version)
+					...getGit(version),
+					original: version
 				};
 			} else {
 				type = 'url';
@@ -155,7 +161,8 @@ module.exports = {
 			type = 'git';
 			versionData = {
 				...versionData,
-				...getGit(version)
+				...getGit(version),
+				original: version
 			};
 		} else {
 			const normalVersion = /^([0-9]+\.){2}[0-9]+$/;
@@ -171,6 +178,7 @@ module.exports = {
 			const dashFormat = /^([0-9.xX]+)[ ]*\-[ ]*([0-9.xX]+)$/;
 			const inequalityFormat = /^([=<>]+)[ ]*([0-9.]+)[ ]([=<>]+)[ ]*([0-9.]+)$/;
 			const xFormat = /^([0-9.]+)[.xX]+$/;
+			const betaFormat = /^\^([0-9.xX]+)\-[beta|alpha].*$/;
 			
 			const padFormat = (initial) => {
 				if (singleNumberFormat.test(initial)) {
@@ -240,6 +248,10 @@ module.exports = {
 			} else if (version === "*") { 
 				versionData.version = "0.0.0";
 				versionData.allowGreater = true;
+			} else if (betaFormat.test(version)) {
+				const matches = version.match(betaFormat);
+				versionData.version = padFormat(matches[1]);
+				versionData.allowGreater = true;
 			} else {
 				throw new Error("Unknown version format " + version);
 				return;
@@ -250,5 +262,25 @@ module.exports = {
 			type,
 			versionData
 		};
+	},
+	findBestVersion: (versionRules, versionList) => {
+		const keys = Object.keys(versionList);
+		for (var i=0;i<keys.length;i++) {
+			const availableVersion = keys[i];
+			//console.log(availableVersion, version);
+			const comparator = module.exports.versionCompare(versionRules.version, availableVersion);
+			//console.log(comparator);
+			let valid = false;
+			if (comparator === 0) {
+				valid = true;
+			} else if (comparator === -1 && versionRules.allowGreater) {
+				valid = true;
+			}
+			if (valid) {
+				return availableVersion;
+			}
+		}
+		
+		return null;
 	}
 };

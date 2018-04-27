@@ -1,4 +1,4 @@
-const { DIRS, getPackage, versionCompare, processVersion } = require('../utils.js');
+const { DIRS, getPackage, versionCompare, processVersion, findBestVersion } = require('../utils.js');
 const fs = require('fs');
 const { exec, execSync } = require('child_process');
 const https = require('https');
@@ -9,16 +9,25 @@ const {
 	MAIN_DIR,
 	MANIFEST_FILE,
 	BIN_DIR,
-	NODE_DIR
+	NODE_DIR,
+	PACKAGE_FILE
 } = DIRS;
 
 let chain = [];
+let startTime;
+let installList = [];
+
+const cleanUp = () => {
+	chain = [];
+	startTime = null;
+	installList = [];
+}
 
 const getTarball = (tarball, key) => {
 	const pathToDownload = MAIN_DIR + "/" + key + ".tgz";
 	return new Promise((resolve, reject) => {
 		https.get(tarball, (response) => {
-			//console.log("request made");
+			//console.log("request made", tarball);
 	        var file = fs.createWriteStream(pathToDownload);
 	         response.on('data', function(chunk){
 				 //console.log(key, 'got data');
@@ -38,17 +47,24 @@ const getTarball = (tarball, key) => {
 					 }
 					 
 					 // clear out package just in case
-					 execSync('rm -rf ' + MAIN_DIR + "/package");
+					 try {
+						 execSync('rm -rf ' + MAIN_DIR + "/package/*");
+						 execSync('rm -rf ' + MAIN_DIR + "/package");
+					 } catch (err) {
+				 		 console.log('got error', err);
+						 throw err;
+					 }
 				 
 					 // get existing list of items in main_dir for comparison
 					 const previousFiles = fs.readdirSync(MAIN_DIR, 'utf8');
-					 //console.log(previousFiles);
+					 //console.log("previous", previousFiles);
 
-					 exec("cd " + MAIN_DIR + " ; tar -xvzf " + key + ".tgz", () => {
-						 //console.log("Untarred file...");
+					 const command = "tar -xvzf " + MAIN_DIR + "/" +  key + ".tgz -C " + MAIN_DIR;
+					 exec(command, (err, stdout, stderr) => {
+						 //console.log("Untarred file...", command, err, stdout, stderr);
 					 
 						 const currentFiles = fs.readdirSync(MAIN_DIR, 'utf8');
-						 //console.log(currentFiles);
+						 //console.log("current", currentFiles);
 					 
 						 const newFiles = [];
 						 currentFiles.forEach((file) => {
@@ -65,8 +81,9 @@ const getTarball = (tarball, key) => {
 						 });
 						 if (newFiles.length === 0) {
 							 console.log("Tarball did not extract or was empty");
-							 process.exit(1);
+							 reject();
 						 }
+						 //console.log(newFiles);
 						 const extractedFolder = newFiles[0];
 						 /*if (fs.existsSync(MAIN_DIR + "/package")) {
 							 console.log("directory exists");
@@ -79,6 +96,7 @@ const getTarball = (tarball, key) => {
 							 process.exit(1);
 						 }
 						 //console.log("going to remove tarball");
+						 //console.log("rm " + MAIN_DIR + "/" + key + ".tgz");
 						 exec("rm " + MAIN_DIR + "/" + key + ".tgz", () => {
 							 //console.log("Extracted folder is", extractedFolder);
 							 const version = json.version;
@@ -86,6 +104,7 @@ const getTarball = (tarball, key) => {
 							 //console.log("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir);
 							 exec("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir, () => {
 								 // Cleanup just in case
+								 //console.log("rm -rf " + MAIN_DIR + "/" + extractedFolder);
 								 exec("rm -rf " + MAIN_DIR + "/" + extractedFolder, () => {
 									 //console.log('dir after moving', fs.readdirSync(MAIN_DIR, 'utf8'));
 								 	 install(versionCacheDir).then(() => {
@@ -128,32 +147,20 @@ const getModuleFromNpm = (key, version) => {
 						return;
 					}
 					
-					const keys = Object.keys(response.versions);
-					//console.log(keys);
-					for (var i=0;i<keys.length;i++) {
-						const availableVersion = keys[i];
-						//console.log(availableVersion, version);
-						const comparator = versionCompare(version.version, availableVersion);
-						//console.log(comparator);
-						let valid = false;
-						if (comparator === 0) {
-							valid = true;
-						} else if (comparator === -1 && version.allowGreater) {
-							valid = true;
+					const usableVersion = findBestVersion(version, response.versions);
+					
+					if (usableVersion) {
+						const versionData = response.versions[usableVersion];
+						//console.log('Found required version');
+						if (versionData.dist) {
+							const tarball = versionData.dist.tarball;
+							//console.log('Downloading from', tarball);
+							getTarball(tarball, key).then((actualVersion) => {
+								//console.log(key, "Tarball fetch compelete");
+								resolve(actualVersion);
+							});
 						}
-						if (valid) {
-							const versionData = response.versions[availableVersion];
-							//console.log('Found required version');
-							if (versionData.dist) {
-								const tarball = versionData.dist.tarball;
-								//console.log('Downloading from', tarball);
-								getTarball(tarball, key).then((actualVersion) => {
-									//console.log(key, "Tarball fetch compelete");
-									resolve(actualVersion);
-								});
-							}
-							return;
-						}
+						return;
 					}
 					console.error("Unable to find version to match", version);
 					console.error("Available Versions: ");
@@ -177,11 +184,33 @@ const installModule = (key, version) => {
 	//console.log("Attempting to install module",key,version);
 	return Promise.resolve()
 	.then(() => {
-		return new Promise((resolve, reject) => {
-			const {
-				type,
-				versionData
-			} = processVersion(version);
+		return new Promise((resolve, reject) => {	
+			let type;
+			let versionData;
+			try {
+				console.log('here');
+				const result = processVersion(version);
+				console.log('here2', result);
+				type = result.type;
+				versionData = result.versionData;
+				console.log('all done');
+			} catch (err) {
+				reject(err);
+				return;
+			}
+			const m = versionData.version;
+			
+			const packageCacheDir = CACHE_DIR + "/" + key;
+			
+			const listKey = `${key}<=>${m}`;
+			//console.log('checking', listKey, installList.length, versionData);
+			if (installList.includes(listKey)) {
+				// module already installed;
+				//console.log('module ' + listKey + ' already installed');
+				let versionCacheDir = packageCacheDir + "/" + versionData.version;
+				resolve([versionCacheDir, key]);
+				return;
+			}
 			
 			const handleExistingInstallation = (cwd) => {
 				install(cwd).then(() => {
@@ -189,9 +218,30 @@ const installModule = (key, version) => {
 				});
 			};
 			
-			//console.log(versionData);
+			const checkManifest = (url, key) => {
+				let handled = false;
+				if (fs.existsSync(MANIFEST_FILE)) {
+					//console.log("Searching manifest for existing entry...");
+					let manifest = fs.readFileSync(MANIFEST_FILE, 'utf8');
+					//console.log(manifest);
+					manifest = manifest.split("\n");
+					for (var i=0;i<manifest.length;i++) {
+						const str = manifest[i].split("<=>");
+						//console.log(str);
+						if (str[0] === url && str[1] === key) {
+							const version = str[2];
+							//console.log("Found existing installation:", version);
+					 		const versionCacheDir = packageCacheDir + "/" + version;
+							handleExistingInstallation(versionCacheDir);
+							handled = true;
+							break;
+						}
+					}
+				}
+				return handled;
+			}
 			
-			const packageCacheDir = CACHE_DIR + "/" + key;
+			//console.log(versionData);
 	
 			if (type === "numeric") {
 				//console.log("Handling dependency", key + " with version " + versionData.version);
@@ -215,28 +265,8 @@ const installModule = (key, version) => {
 				//console.log("Handling dependency", key,"with url",url);
 				const urlSplit = url.split(".");
 				const ending = urlSplit[urlSplit.length-1];
-
-				let handled = false;
-				if (fs.existsSync(MANIFEST_FILE)) {
-					//console.log("Searching manifest for existing entry...");
-					let manifest = fs.readFileSync(MANIFEST_FILE, 'utf8');
-					//console.log(manifest);
-					manifest = manifest.split("\n");
-					for (var i=0;i<manifest.length;i++) {
-						const str = manifest[i].split("<=>");
-						//console.log(str);
-						if (str[0] === url && str[1] === key) {
-							const version = str[2];
-							//console.log("Found existing installation:", version);
-					 		const versionCacheDir = packageCacheDir + "/" + version;
-							handleExistingInstallation(versionCacheDir);
-							handled = true;
-							break;
-						}
-					}
-				}
 		
-				if (handled) {
+				if (checkManifest(url, key)) {
 					return;
 				}
 		
@@ -261,6 +291,13 @@ const installModule = (key, version) => {
 				if (versionData.branch) {
 					command += " -b " + versionData.branch;
 				};
+				
+				const fullUrl = versionData.original;
+				
+				if (checkManifest(fullUrl, key)) {
+					return;
+				}
+				
 				//console.log(command);
 				exec("rm -rf " + MAIN_DIR + "/package", () => {
 					if (!fs.existsSync(packageCacheDir)) {
@@ -276,10 +313,15 @@ const installModule = (key, version) => {
 
 						const version = json.version;
 						const versionCacheDir = packageCacheDir + "/" + version;
+						
 						//console.log("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir);
 						exec("mv " + MAIN_DIR + "/" + extractedFolder + " " + versionCacheDir, () => {
 							//console.log('moving folder to ',versionCacheDir);
+							//console.log("rm -rf " + MAIN_DIR + "/" + extractedFolder);
 							exec("rm -rf " + MAIN_DIR + "/" + extractedFolder, () => {
+								fs.appendFileSync(MANIFEST_FILE, fullUrl + "<=>" + key + "<=>" + version + "\n");
+				
+								resolve([versionCacheDir, key]);
 							 	install(versionCacheDir).then(() => {
 									resolve(version)
 								});
@@ -298,31 +340,35 @@ const installModule = (key, version) => {
 const install = (cwd, environment) => {
 	return Promise.resolve()
 	.then(() => {
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			const json = getPackage(cwd);
 			
 			const name = json.name || cwd;
-			const version = json.version;
-			const key = name + "<=>" + version;
-			
-			let tab = '';
-			for (var i=0;i<chain.length;i++) {
-				tab += '  ';
-			}
+			const parentVersion = json.version;
+			const key = name + "<=>" + parentVersion;
 			
 			if (chain.includes(key)) {
-				console.log(tab, "Module " + name + " already found in chain, skipping");
+				//console.log("Module " + name + " already found in chain, skipping");
 				resolve();
 				return;
 			}
 			chain.push(key);
-			tab += '  ';
+			
+			let tab = '';
+			let tab2 = '';
+			for (var i=1;i<chain.length;i++) {
+				tab += '    ';
+			}
+			for (var i=0;i<chain.length;i++) {
+				tab2 += '    ';
+			}
 			
 			const top = chain.length <= 2;
+			//console.log(chain.length +  "'" + tab + "'");
 			
 			//console.log("Chain is", chain);
 			
-			if (top) console.log(tab,"Installing module", name);
+			if (top) console.log(tab + "Installing module", name);
 			
 			let fullDeps = {
 				...json.dependencies
@@ -336,6 +382,7 @@ const install = (cwd, environment) => {
 			//console.log("Got dependencies", JSON.stringify(fullDeps, null, 4));
 			//console.log(json);
 			const nodeDir = cwd + "/node_modules";
+			//console.log('rm -rf ' + nodeDir);
 			exec("rm -rf " + nodeDir, () => {
 				if (!fs.existsSync(nodeDir)) {
 					fs.mkdirSync(nodeDir);
@@ -355,20 +402,24 @@ const install = (cwd, environment) => {
 			
 				const installDependency = () => {
 					if (top) {
-						console.log(tab, name + " dependencies left: " + dependencyKeys.length);
-					}
-					//console.log(dependencyKeys);
-					if (dependencyKeys.length === 0) {
-						// all done!
-					 	if (top) {
-							console.log(tab, 'Installation of ' + name + " complete!");
-						}
-						resolve();
-						return;
+						console.log(tab2 + name + " dependencies left: " + dependencyKeys.length);
 					}
 				
 					const key = dependencyKeys.shift();
 					let version = fullDeps[key];
+					
+					//console.log(dependencyKeys);
+					if (dependencyKeys.length === 0) {
+						// all done!
+					 	if (top) {
+							console.log(tab + 'Installation of ' + name + " complete!");
+							// write to the installed packages file
+							fs.appendFileSync(PACKAGE_FILE, name + "<=>" + parentVersion + "\n");
+							installList.push(name + "<=>" + parentVersion);
+						}
+						resolve();
+						return;
+					}
 					
 					installModule(key, version).then((result) => {
 						if (!result) {
@@ -380,8 +431,9 @@ const install = (cwd, environment) => {
 						return finishSync(dir, key);
 					}).then(installDependency)
 					.catch((e) => {
-						console.log("Unable to install dependency");
-						exec("rm -rf " + cwd);
+						//console.log("Unable to install dependency");
+						//exec("rm -rf " + cwd);
+						reject('Unable to install dependency');
 					})
 				}
 			
@@ -486,6 +538,23 @@ const install = (cwd, environment) => {
 };
 
 module.exports = {
-	install,
+	install: (cwd, environment) => {
+		startTime = Date.now();
+		
+		const end = () => {
+			console.log('end!');
+			const time = Date.now();
+			const diff = time - startTime;
+			console.log("Took", diff);
+
+			cleanUp();
+		}
+		
+		const installed = fs.readFileSync(PACKAGE_FILE, 'utf8');
+		installList = installed.split("\n");
+		
+		
+		return install(cwd, environment).then(end).catch(end);
+	},
 	installModule
 };
