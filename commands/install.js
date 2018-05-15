@@ -2,6 +2,7 @@ const { DIRS, getPackage, versionCompare, processVersion, findBestVersion } = re
 const fs = require('fs');
 const { exec, execSync } = require('child_process');
 const https = require('https');
+const http = require('http');
 const path = require('path');
 
 const {
@@ -26,8 +27,8 @@ const cleanUp = () => {
 const getTarball = (tarball, key) => {
 	const pathToDownload = MAIN_DIR + "/" + key + ".tgz";
 	return new Promise((resolve, reject) => {
-		https.get(tarball, (response) => {
-			//console.log("request made", tarball);
+		//console.log("request made", tarball);
+		const handleDownload = (response) => {
 	        var file = fs.createWriteStream(pathToDownload);
 	         response.on('data', function(chunk){
 				 //console.log(key, 'got data');
@@ -116,10 +117,23 @@ const getTarball = (tarball, key) => {
 					 });
 				 });
 	         });
-		 }).on('error', (e) => {
+		 };
+		 
+		 const handleError = (e) => {
 			 console.log("Unable to fetch tarball", e);
 			 reject();
-		 });
+		 }
+		 
+		 const arr = tarball.split(":");
+		 const protocol = arr[0];
+		 if (protocol === 'https') {
+			 https.get(tarball, handleDownload).on('error', handleError);
+		 } else if (protocol === 'http') {
+		 	 http.get(tarball, handleDownload).on('error', handleError);
+		 } else {
+			 console.log("Unknown protocol:", protocol);
+			 reject();
+		 }
 	 });
 }
 
@@ -158,12 +172,13 @@ const getModuleFromNpm = (key, version) => {
 							getTarball(tarball, key).then((actualVersion) => {
 								//console.log(key, "Tarball fetch compelete");
 								resolve(actualVersion);
-							});
+							}).catch(reject);
 						}
 						return;
 					}
 					console.error("Unable to find version to match", version);
 					console.error("Available Versions: ");
+					const keys = Object.keys(response.versions);
 					for (var i=0;i<keys.length;i++) {
 						const availableVersion = keys[i];
 						console.error(availableVersion);
@@ -188,17 +203,17 @@ const installModule = (key, version) => {
 			let type;
 			let versionData;
 			try {
-				console.log('here');
+				//console.log('here');
 				const result = processVersion(version);
-				console.log('here2', result);
+				//console.log('here2', result);
 				type = result.type;
 				versionData = result.versionData;
-				console.log('all done');
+				//console.log('all done');
 			} catch (err) {
 				reject(err);
 				return;
 			}
-			const m = versionData.version;
+			const m = versionData.useVersion;
 			
 			const packageCacheDir = CACHE_DIR + "/" + key;
 			
@@ -207,7 +222,7 @@ const installModule = (key, version) => {
 			if (installList.includes(listKey)) {
 				// module already installed;
 				//console.log('module ' + listKey + ' already installed');
-				let versionCacheDir = packageCacheDir + "/" + versionData.version;
+				let versionCacheDir = packageCacheDir + "/" + versionData.useVersion;
 				resolve([versionCacheDir, key]);
 				return;
 			}
@@ -245,7 +260,7 @@ const installModule = (key, version) => {
 	
 			if (type === "numeric") {
 				//console.log("Handling dependency", key + " with version " + versionData.version);
-			 	let versionCacheDir = packageCacheDir + "/" + versionData.version;
+			 	let versionCacheDir = packageCacheDir + "/" + versionData.useVersion;
 				if (fs.existsSync(versionCacheDir)) {
 					//console.log('Found existing installation');
 					handleExistingInstallation(versionCacheDir);
@@ -257,7 +272,7 @@ const installModule = (key, version) => {
 						resolve([versionCacheDir, key]);
 					}).catch((e) => {
 						//console.error(key, "Installing dependency failed");
-						reject();
+						reject(e);
 					});
 				}
 			} else if (type === 'url') {
@@ -332,7 +347,7 @@ const installModule = (key, version) => {
 			}
 		});
 	}).catch((e) => {
-		console.log(key, "Unable to install module", e);
+		console.log(key + "-Unable to install module:", e);
 		throw e;
 	});
 }
@@ -368,7 +383,7 @@ const install = (cwd, environment) => {
 			
 			//console.log("Chain is", chain);
 			
-			if (top) console.log(tab + "Installing module", name);
+			if (top) console.log(tab + "Installing module", name, parentVersion);
 			
 			let fullDeps = {
 				...json.dependencies
@@ -433,7 +448,7 @@ const install = (cwd, environment) => {
 					.catch((e) => {
 						//console.log("Unable to install dependency");
 						//exec("rm -rf " + cwd);
-						reject('Unable to install dependency');
+						reject('Unable to install dependency: ' + e.message);
 					})
 				}
 			
@@ -517,7 +532,7 @@ const install = (cwd, environment) => {
 			
 			const versionPath = parentDir + "/" + folder;
 			const realVersion = processVersion(folder);
-			const version2 = realVersion.versionData.version;
+			const version2 = realVersion.versionData.useVersion;
 			const comparitor = versionCompare(highest, version2);
 			
 			//console.log(highest, version2, comparitor);

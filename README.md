@@ -7,8 +7,7 @@ Existing commands:
 
 ```
 install - installs a module from package.json
-env:[environment] - sets the environment for motus
-babel - runs a standard babel parser over all found js files
+babel - installs and runs a standard babel parser over all found js files
 ```
 
 # Installing and using
@@ -17,19 +16,15 @@ I don't have an install script right now, will make one soon. I currently use an
 
     alias motus='node <path to motus repo>/main.js'
 
-Everything typed after the "motus" is considered a command that will be executed in sequence. For instance, to install a project, including developer packages:
+To install a project:
 
-    motus env:development install
+    motus install
 
 To run babel over a project:
 
     motus babel
 
-To do both in one sitting:
-
-    motus env:development install babel
-
-The command system is meant to be very easy to use and to get projects off the ground quickly without having to set up larger systems like webpack.
+The system is meant to be very easy to use and to get projects off the ground quickly without having to set up larger systems like webpack (since there should be commands that handle that for you)
 
 # Benefits over NPM
 

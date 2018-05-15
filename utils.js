@@ -65,6 +65,9 @@ module.exports = {
 		return json;
 	},
 	versionCompare: (v1, v2) => {
+		if (v1 === v2) {
+			return 0;
+		}
 		const v1Split = v1.split(".");
 		const v2Split = v2.split(".");
 	
@@ -165,19 +168,20 @@ module.exports = {
 				original: version
 			};
 		} else {
+			const tooManyDots = /^([0-9.]+)[.]{3}([0-9.]+)$/;
 			const normalVersion = /^([0-9]+\.){2}[0-9]+$/;
 			const greaterVersion = /^\^([0-9]+\.){1,2}[0-9]+$/;
 			const extra = /^([0-9]+\.){2}[0-9]+\-.*?$/;
-			const approxVersion = /^\~([0-9]+\.){2}[0-9]+$/;
+			const approxVersion = /^\~([0-9.xX]+)$/;
 			const approxVersionExtra = /^\~([0-9]+\.){2}[0-9]+\-.*?$/;
 			const greaterEqualVersion = /^\>\=[ ]*(([0-9]+\.){2}[0-9]+)$/;
 			const singleNumberFormat = /^[0-9]+$/;
 			const doubleNumberFormat = /^[0-9]+\.[0-9]+$/;
 			const equalsFormat = /^\=[ ]*(([0-9]+\.){2}[0-9]+)$/;
 			const orFormat = /^([0-9])[ ]*\|\|/;
-			const dashFormat = /^([0-9.xX]+)[ ]*\-[ ]*([0-9.xX]+)$/;
-			const inequalityFormat = /^([=<>]+)[ ]*([0-9.]+)[ ]([=<>]+)[ ]*([0-9.]+)$/;
-			const xFormat = /^([0-9.]+)[.xX]+$/;
+			const dashFormat = /^([\^0-9.xX]+)[ ]*\-[ ]*([\^0-9.xX]+)$/;
+			const inequalityFormat = /^([=<>]*)[ ]*([\^0-9.]+)[ ]([=<>]+)[ ]*([\^0-9.]+)$/;
+			const xFormat = /^([0-9.]+?)[.xX]+$/;
 			const betaFormat = /^\^([0-9.xX]+)\-[beta|alpha].*$/;
 			
 			const padFormat = (initial) => {
@@ -190,73 +194,114 @@ module.exports = {
 				}
 			}
 
+			//console.log(version);
 			type = 'numeric';
-			if (normalVersion.test(version) || extra.test(version)) {
-				versionData.version = version;
+			// have to do this first because other regex catch it too
+			if (tooManyDots.test(version)) {
+				//console.log('matches');
+				const matches = version.match(tooManyDots);
+				//console.log(matches);
+			} else if (normalVersion.test(version) || extra.test(version)) {
+				//console.log('here now');
+				versionData.exactVersion = version;
 			} else if (greaterVersion.test(version)) {
 				//console.log("version is greater");
-				versionData.version = padFormat(version.substring(1));
-				versionData.allowGreater = true;
+				versionData.greaterVersion = padFormat(version.substring(1));
 				//console.log(versionData.version);
 			} else if (approxVersion.test(version) || approxVersionExtra.test(version)) {
-				versionData.version = version.substring(1);
-				versionData.approximate = true;
+				const externalData = module.exports.processVersion(version.substring(1));
+				//console.log(externalData);
+				const newVersion = externalData.versionData.useVersion;
+				//console.log(externalData);
+				const arr = newVersion.split('.');
+				// so basically here if we get 4, then we want to get between
+				// 4.0.0 and 5.0.0
+				// if we get 4.3, we want to get between 4.3.0 and 4.4.0
+				// so get the last bit, rejoin the version string, and increment
+				// then append.
+				let part = arr.pop();
+				while (part === '0') {
+					part = arr.pop();
+				}
+				const greater = [...arr, part];
+				while (greater.length < 3) {
+					greater.push('0');
+				}
+				const lesser = [...arr, (part + 1)];
+				while (lesser.length < 3) {
+					lesser.push('0');
+				}
+				versionData.greaterVersion = greater.join('.');
+				versionData.smallerThanVersion = lesser.join('.');
 			} else if (greaterEqualVersion.test(version)) {
 				const matches = version.match(greaterEqualVersion);
-				versionData.version = matches[1];
-				versionData.allowGreater = true;
+				versionData.greaterVersion = matches[1];
 			} else if (singleNumberFormat.test(version)) {
-				versionData.version = version + ".0.0";
-				versionData.allowGreater = true;
+				version = parseInt(version, 10);
+				versionData.greaterVersion = version + ".0.0";
+				versionData.smallerThanVersion = (version + 1) + '.0.0';
+				//console.log('here', version, versionData);
 			} else if (doubleNumberFormat.test(version)) {
-				versionData.version = version + ".0";
-				versionData.allowGreater = true;
+				// basically the same thing as approximate up there, with some tweaks
+				const arr = version.split('.');
+				const finalPart = parseInt(arr.pop(), 10);
+				const greater = [...arr, finalPart, '0'];
+				const lesser = [...arr, (finalPart + 1), '0'];
+				versionData.greaterVersion = greater.join('.');
+				versionData.smallerThanVersion = lesser.join('.');
 			} else if (equalsFormat.test(version)) {
 				const matches = version.match(equalsFormat);
-				versionData.version = matches[1];
+				versionData.exactVersion = matches[1];
 			} else if (orFormat.test(version)) {
 				const matches = version.match(orFormat);
-				version = matches[1];
-				if (singleNumberFormat.test(version)) {
-					versionData.version = version + ".0.0";
-					versionData.allowGreater = true;
-				} else if (doubleNumberFormat.test(version)) {
-					versionData.version = version + ".0";
-					versionData.allowGreater = true;
-				}
+				const externalData = module.exports.processVersion(matches[1]);
+				versionData = externalData.versionData;
 			} else if (dashFormat.test(version)) {
 				const matches = version.match(dashFormat);
 				const externalData = module.exports.processVersion(matches[1]);
-				//console.log(externalData);
-				versionData.version = externalData.versionData.version;
+				versionData = externalData.versionData;
 			} else if (inequalityFormat.test(version)) {
+				// this is terribly wrong right now, but that's ok
 				const matches = version.match(inequalityFormat);
 				const ineq1 = matches[1];
-				const num1 = padFormat(matches[2]);
+				const num1 = module.exports.processVersion(matches[2])
+					.versionData.useVersion;
 				const ineq2 = matches[3];
-				const num2 = padFormat(matches[4]);
+				const num2 = module.exports.processVersion(matches[4])
+					.versionData.useVersion;
 				// Right now ignore the second part, will be important later though
 				if (ineq1 === ">=") {
-					versionData.version = num1;
-					versionData.allowGreater = true;
+					versionData.greaterVersion = num1;
 				} else {
 					throw new Error("Unhandled inequality: " + version);
 				}
 			} else if (xFormat.test(version)) {
 				const matches = version.match(xFormat);
-				versionData.version = padFormat(matches[1]);
+				//console.log('xformat', matches[1]);
+				versionData.exactVersion = padFormat(matches[1]);
 			} else if (version === "*") { 
-				versionData.version = "0.0.0";
-				versionData.allowGreater = true;
+				versionData.greaterVersion = "0.0.0";
 			} else if (betaFormat.test(version)) {
 				const matches = version.match(betaFormat);
-				versionData.version = padFormat(matches[1]);
-				versionData.allowGreater = true;
+				versionData.greaterVersion = padFormat(matches[1]);
+			} else if (version === 'latest') {
+				// should find the very latest version
+				versionData.greaterVerison = '0.0.0';
 			} else {
 				throw new Error("Unknown version format " + version);
 				return;
 			}
 		}
+		
+		if (versionData.exactVersion) {
+			versionData.useVersion = versionData.exactVersion;
+		} else if (versionData.greaterVersion) {
+			versionData.useVersion = versionData.greaterVersion;
+		} else {
+			versionData.useVersion = versionData.smallerThanVersion;
+		}
+		
+		//console.log('result is', versionData);
 		
 		return {
 			type,
@@ -264,23 +309,55 @@ module.exports = {
 		};
 	},
 	findBestVersion: (versionRules, versionList) => {
-		const keys = Object.keys(versionList);
-		for (var i=0;i<keys.length;i++) {
-			const availableVersion = keys[i];
-			//console.log(availableVersion, version);
-			const comparator = module.exports.versionCompare(versionRules.version, availableVersion);
-			//console.log(comparator);
-			let valid = false;
-			if (comparator === 0) {
-				valid = true;
-			} else if (comparator === -1 && versionRules.allowGreater) {
-				valid = true;
+		const versions = Object.keys(versionList)
+			.sort(module.exports.versionCompare)
+			.reverse();
+			
+		//console.log(versionRules);
+		const versionsWithComparison = versions.map((availableVersion) => {
+			let comparatorEqual = 0;
+			let compGreater = -1;
+			let compLesser = 1;
+			
+			if (versionRules.exactVersion) {
+				comparatorEqual = module.exports.versionCompare(
+					versionRules.exactVersion,
+					availableVersion
+				);
 			}
+			if (versionRules.greaterVersion) {
+				compGreater = module.exports.versionCompare(
+					versionRules.greaterVersion,
+					availableVersion
+				);
+			}
+			if (versionRules.smallerThanVersion) {
+				compLesser = module.exports.versionCompare(
+					versionRules.smallerThanVersion,
+					availableVersion
+				);
+			}
+			
+			//console.log(versionRules, availableVersion, comparatorEqual);
+			
+			return {
+				version: availableVersion,
+				compEqual: comparatorEqual === 0,
+				compGreater: compGreater === 0 || compGreater === -1,
+				compLesser: compLesser === 1
+			}
+		});
+		for (var i=versionsWithComparison.length-1;i>=0;i--) {
+			const { version, compEqual, compGreater, compLesser } = versionsWithComparison[i];
+			//console.log(availableVersion, version);
+			//console.log(comparator);
+			const valid = compEqual && compGreater && compLesser;
 			if (valid) {
-				return availableVersion;
+				return version;
 			}
 		}
 		
 		return null;
-	}
+	},
+	
 };
