@@ -1,0 +1,8 @@
+{
+	"scripts": {
+		"clean": "rm -rf node_modules"
+	},
+	"dependencies": {
+    	"semver": "5.5.0"
+	}
+}

@@ -5,6 +5,7 @@ const { DIRS, getPackage } = require('./utils.js');
 
 const { install } = require('./commands/install.js');
 const babel = require('./commands/babel.js');
+const init = require('./commands/init.js');
 
 const cwd = path.resolve("./");
 
@@ -26,6 +27,9 @@ switch(command) {
 		break;
 	case "babel":
 		promise = babel(cwd);
+		break;
+	case "init":
+		promise = init(cwd);
 		break;
 	default:
 		console.error("Unknown command", command);

@@ -161,7 +161,10 @@ const getModuleFromNpm = (key, version) => {
 						return;
 					}
 					
-					const usableVersion = findBestVersion(version, response.versions);
+					const usableVersion = findBestVersion(
+						version,
+						Object.keys(response.versions)
+					);
 					
 					if (usableVersion) {
 						const versionData = response.versions[usableVersion];
@@ -183,12 +186,13 @@ const getModuleFromNpm = (key, version) => {
 						const availableVersion = keys[i];
 						console.error(availableVersion);
 					}
-					reject();
+					reject(new Error("Could not find version"));
 					//console.log(response);
 				});
 			});
 			request.on('error', (e) => {
 				console.error(e);
+				reject(e);
 			});
 			request.end();
 		});
@@ -213,11 +217,11 @@ const installModule = (key, version) => {
 				reject(err);
 				return;
 			}
-			const m = versionData.useVersion;
+			const realVersion = versionData.useVersion;
 			
 			const packageCacheDir = CACHE_DIR + "/" + key;
 			
-			const listKey = `${key}<=>${m}`;
+			const listKey = `${key}<=>${realVersion}`;
 			//console.log('checking', listKey, installList.length, versionData);
 			if (installList.includes(listKey)) {
 				// module already installed;
@@ -266,7 +270,7 @@ const installModule = (key, version) => {
 					handleExistingInstallation(versionCacheDir);
 				} else {
 					//console.log("Fetching module");
-					getModuleFromNpm(key, versionData).then((actualVersion) => {
+					getModuleFromNpm(key, version).then((actualVersion) => {
 						//console.log(key, 'Finished installing module from npm');
 					 	versionCacheDir = packageCacheDir + "/" + actualVersion;
 						resolve([versionCacheDir, key]);
