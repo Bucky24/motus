@@ -112,8 +112,8 @@ module.exports = {
 			};
 		} else {
 			type = 'numeric';
-			console.log('numeric for ', version);
-			console.log(semver.coerce(version));
+			//console.log('numeric for ', version);
+			//console.log(semver.coerce(version));
 			versionData = {
 				exactVersion: semver.coerce(version).version
 			}
@@ -150,5 +150,15 @@ module.exports = {
 		
 		return null;
 	},
-	
+	createDir: (base, dir) => {
+	 	const relativeDirName = dir.replace(base + '/', '');
+	 	const dirList = relativeDirName.split(path.sep);
+	 	dirList.reduce((fullPath, chunk) => {
+	 		const newPath = `${fullPath}${path.sep}${chunk}`;
+			if (!fs.existsSync(newPath)) {
+	 			fs.mkdirSync(newPath);
+			}
+	 		return newPath;
+	 	}, base);
+	}
 };

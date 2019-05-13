@@ -1,4 +1,4 @@
-const { DIRS, getPackage, versionCompare, processVersion, findBestVersion } = require('../utils.js');
+const { DIRS, getPackage, versionCompare, processVersion, findBestVersion, createDir } = require('../utils.js');
 const fs = require('fs');
 const { exec, execSync } = require('child_process');
 const https = require('https');
@@ -25,9 +25,11 @@ const cleanUp = () => {
 }
 
 const getTarball = (tarball, key) => {
-	const pathToDownload = MAIN_DIR + "/" + key + ".tgz";
+	const tarBall = key.replace("\/", "SLASH") + ".tgz";
+	const pathToDownload = MAIN_DIR + "/" + tarBall;
 	return new Promise((resolve, reject) => {
 		//console.log("request made", tarball);
+		//console.log('download path', pathToDownload);
 		const handleDownload = (response) => {
 	        var file = fs.createWriteStream(pathToDownload);
 	         response.on('data', function(chunk){
@@ -39,9 +41,8 @@ const getTarball = (tarball, key) => {
 		             //console.log(key, 'Download complete');
 			 
 					 const packageCacheDir = CACHE_DIR + "/" + key;
-					 if (!fs.existsSync(packageCacheDir)) {
-					 	fs.mkdirSync(packageCacheDir);
-					 }
+					 console.log(packageCacheDir);
+					 createDir(CACHE_DIR, packageCacheDir);
 				 
 					 if (!fs.existsSync(MAIN_DIR + "/" + key + ".tgz")) {
 						 console.log('Tarball does not exist');
@@ -60,7 +61,8 @@ const getTarball = (tarball, key) => {
 					 const previousFiles = fs.readdirSync(MAIN_DIR, 'utf8');
 					 //console.log("previous", previousFiles);
 
-					 const command = "tar -xvzf " + MAIN_DIR + "/" +  key + ".tgz -C " + MAIN_DIR;
+					 const command = "tar -C " + MAIN_DIR + " -xvzf " + MAIN_DIR + "/" + tarBall;
+					 console.log(command);
 					 exec(command, (err, stdout, stderr) => {
 						 //console.log("Untarred file...", command, err, stdout, stderr);
 					 
@@ -98,7 +100,7 @@ const getTarball = (tarball, key) => {
 						 }
 						 //console.log("going to remove tarball");
 						 //console.log("rm " + MAIN_DIR + "/" + key + ".tgz");
-						 exec("rm " + MAIN_DIR + "/" + key + ".tgz", () => {
+						 exec("rm " + MAIN_DIR + "/" + tarBall, () => {
 							 //console.log("Extracted folder is", extractedFolder);
 							 const version = json.version;
 							 const versionCacheDir = packageCacheDir + "/" + version;
@@ -171,7 +173,7 @@ const getModuleFromNpm = (key, version) => {
 						//console.log('Found required version');
 						if (versionData.dist) {
 							const tarball = versionData.dist.tarball;
-							//console.log('Downloading from', tarball);
+							console.log('Downloading from', tarball);
 							getTarball(tarball, key).then((actualVersion) => {
 								//console.log(key, "Tarball fetch compelete");
 								resolve(actualVersion);
@@ -207,7 +209,7 @@ const installModule = (key, version) => {
 			let type;
 			let versionData;
 			try {
-				//console.log('here');
+				//console.log('here', version);
 				const result = processVersion(version);
 				//console.log('here2', result);
 				type = result.type;
@@ -269,9 +271,9 @@ const installModule = (key, version) => {
 					//console.log('Found existing installation');
 					handleExistingInstallation(versionCacheDir);
 				} else {
-					//console.log("Fetching module");
+					console.log("Fetching module");
 					getModuleFromNpm(key, version).then((actualVersion) => {
-						//console.log(key, 'Finished installing module from npm');
+						console.log(key, 'Finished installing module from npm', packageCacheDir);
 					 	versionCacheDir = packageCacheDir + "/" + actualVersion;
 						resolve([versionCacheDir, key]);
 					}).catch((e) => {
@@ -411,7 +413,6 @@ const install = (cwd, environment) => {
 			
 				 const finishSync = (versionCacheDir, key) => {
 					 return new Promise((resolve) => {
-						 //console.log("Linking!");
 						 //console.log('ln -s ' + versionCacheDir + " " + nodeDir + "/" + key);
 						 exec('ln -s ' + versionCacheDir + " " + nodeDir + "/" + key, () => {
 							 resolve();
@@ -498,6 +499,10 @@ const install = (cwd, environment) => {
 					
 						//console.log(key, scriptPath);
 					
+						createDir(BIN_DIR, BIN_DIR + '/' + key);
+						// now remove the actual key because we're about to symlink it
+						fs.rmdirSync(BIN_DIR + '/' + key);
+	
 						exec('ln -s ' + scriptPath + ' ' + BIN_DIR + '/' + key, () => {
 							exec('chmod +x ' + BIN_DIR + "/" + key, () => {
 								copyBin();
