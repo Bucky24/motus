@@ -110,6 +110,11 @@ module.exports = {
 				...getGit(version),
 				original: version
 			};
+		} else if (version === '*') {
+			type = 'numeric';
+			versionData = {
+				original: version
+			}
 		} else {
 			type = 'numeric';
 			//console.log('numeric for ', version);
@@ -124,8 +129,10 @@ module.exports = {
 			versionData.useVersion = versionData.exactVersion;
 		} else if (versionData.greaterVersion) {
 			versionData.useVersion = versionData.greaterVersion;
-		} else {
+		} else if (versionData.smallerThanVersion) {
 			versionData.useVersion = versionData.smallerThanVersion;
+		} else {
+			versionData.useVersion = versionData.original;
 		}
 		
 		//console.log('result is', versionData);

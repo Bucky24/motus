@@ -25,7 +25,8 @@ const cleanUp = () => {
 }
 
 const getTarball = (tarball, key) => {
-	const tarBall = key.replace("\/", "SLASH") + ".tgz";
+	const safeKey = key.replace("\/", 'SLASH');
+	const tarBall = safeKey + ".tgz";
 	const pathToDownload = MAIN_DIR + "/" + tarBall;
 	return new Promise((resolve, reject) => {
 		//console.log("request made", tarball);
@@ -38,13 +39,13 @@ const getTarball = (tarball, key) => {
 	         }).on('end', function(){
 	             file.end();
 				 file.on('finish', () => {
-		             //console.log(key, 'Download complete');
+		             //console.log('Download complete', key, pathToDownload);
 			 
 					 const packageCacheDir = CACHE_DIR + "/" + key;
-					 console.log(packageCacheDir);
+					 //console.log(packageCacheDir);
 					 createDir(CACHE_DIR, packageCacheDir);
 				 
-					 if (!fs.existsSync(MAIN_DIR + "/" + key + ".tgz")) {
+					 if (!fs.existsSync(pathToDownload)) {
 						 console.log('Tarball does not exist');
 					 }
 					 
@@ -62,7 +63,7 @@ const getTarball = (tarball, key) => {
 					 //console.log("previous", previousFiles);
 
 					 const command = "tar -C " + MAIN_DIR + " -xvzf " + MAIN_DIR + "/" + tarBall;
-					 console.log(command);
+					 //console.log(command);
 					 exec(command, (err, stdout, stderr) => {
 						 //console.log("Untarred file...", command, err, stdout, stderr);
 					 
@@ -87,7 +88,7 @@ const getTarball = (tarball, key) => {
 							 reject();
 						 }
 						 //console.log(newFiles);
-						 const extractedFolder = newFiles[0];
+						 let extractedFolder = newFiles[0];
 						 /*if (fs.existsSync(MAIN_DIR + "/package")) {
 							 console.log("directory exists");
 						 }else if (!fs.existsSync(MAIN_DIR + "/package")) {
@@ -101,6 +102,7 @@ const getTarball = (tarball, key) => {
 						 //console.log("going to remove tarball");
 						 //console.log("rm " + MAIN_DIR + "/" + key + ".tgz");
 						 exec("rm " + MAIN_DIR + "/" + tarBall, () => {
+							 extractedFolder = extractedFolder.replace(/ /g, '\\ ');
 							 //console.log("Extracted folder is", extractedFolder);
 							 const version = json.version;
 							 const versionCacheDir = packageCacheDir + "/" + version;
@@ -173,7 +175,7 @@ const getModuleFromNpm = (key, version) => {
 						//console.log('Found required version');
 						if (versionData.dist) {
 							const tarball = versionData.dist.tarball;
-							console.log('Downloading from', tarball);
+							//console.log('Downloading from', tarball);
 							getTarball(tarball, key).then((actualVersion) => {
 								//console.log(key, "Tarball fetch compelete");
 								resolve(actualVersion);
@@ -271,9 +273,9 @@ const installModule = (key, version) => {
 					//console.log('Found existing installation');
 					handleExistingInstallation(versionCacheDir);
 				} else {
-					console.log("Fetching module");
+					//console.log("Fetching module");
 					getModuleFromNpm(key, version).then((actualVersion) => {
-						console.log(key, 'Finished installing module from npm', packageCacheDir);
+						//console.log(key, 'Finished installing module from npm', packageCacheDir);
 					 	versionCacheDir = packageCacheDir + "/" + actualVersion;
 						resolve([versionCacheDir, key]);
 					}).catch((e) => {
@@ -497,7 +499,7 @@ const install = (cwd, environment) => {
 						const key = binKeys.shift();
 						const scriptPath = cwd + "/" + objects[key];
 					
-						//console.log(key, scriptPath);
+						//console.log('copying binary', key, scriptPath);
 					
 						createDir(BIN_DIR, BIN_DIR + '/' + key);
 						// now remove the actual key because we're about to symlink it
@@ -552,8 +554,9 @@ const install = (cwd, environment) => {
 		}
 		
 		if (fs.existsSync(NODE_DIR + "/" + name)) {
-			execSync("rm " + NODE_DIR + "/" + name);
+			execSync("rm -rf " + NODE_DIR + "/" + name);
 		}
+		createDir(NODE_DIR, NODE_DIR + "/" + name);
 		const command = "ln -s " + parentDir + "/" + highest + " " + NODE_DIR + "/" + name;
 		execSync(command);
 	}).then(() => {
