@@ -300,7 +300,7 @@ const installModule = (key, version) => {
 				 		const versionCacheDir = packageCacheDir + "/" + version;
 				
 						// adding to manifest
-						c//onsole.log("Adding to manifest");
+						//console.log("Adding to manifest");
 						fs.appendFileSync(MANIFEST_FILE, url + "<=>" + key + "<=>" + version + "\n");
 				
 						resolve([versionCacheDir, key]);
@@ -386,12 +386,20 @@ const install = (cwd, environment) => {
 				tab2 += '    ';
 			}
 			
-			const top = chain.length <= 2;
+			const showOutput = chain.length <= 2;
+			const top = chain.length <= 1;
 			//console.log(chain.length +  "'" + tab + "'");
 			
 			//console.log("Chain is", chain);
 			
-			if (top) console.log(tab + "Installing module", name, parentVersion);
+			if (showOutput) console.log(tab + "Installing module", name, parentVersion);
+			
+			// if we've already installed it, don't bother checking for deps, we probably already installed those too
+			// but never check for the topmost, because that's usually a package we want to install again and again
+			if (!top && installList.includes(key)) {
+				resolve();
+				return;
+			}
 			
 			let fullDeps = {
 				...json.dependencies
@@ -423,7 +431,7 @@ const install = (cwd, environment) => {
 				 };
 			
 				const installDependency = () => {
-					if (top) {
+					if (showOutput) {
 						console.log(tab2 + name + " dependencies left: " + dependencyKeys.length);
 					}
 				
@@ -433,12 +441,12 @@ const install = (cwd, environment) => {
 					//console.log(dependencyKeys);
 					if (dependencyKeys.length === 0) {
 						// all done!
-					 	if (top) {
+					 	if (showOutput) {
 							console.log(tab + 'Installation of ' + name + " complete!");
 							// write to the installed packages file
-							fs.appendFileSync(PACKAGE_FILE, name + "<=>" + parentVersion + "\n");
-							installList.push(name + "<=>" + parentVersion);
 						}
+						fs.appendFileSync(PACKAGE_FILE, name + "<=>" + parentVersion + "\n");
+						installList.push(name + "<=>" + parentVersion);
 						resolve();
 						return;
 					}
@@ -471,7 +479,7 @@ const install = (cwd, environment) => {
 			const name = json.name || cwd;
 			
 			if (json.bin) {
-				//console.log("Linking binaries for " + name);
+				//console.log("Linking binaries for " + name, json.bin);
 				
 				let objects = json.bin;
 							
@@ -500,10 +508,20 @@ const install = (cwd, environment) => {
 						const scriptPath = cwd + "/" + objects[key];
 					
 						//console.log('copying binary', key, scriptPath);
-					
-						createDir(BIN_DIR, BIN_DIR + '/' + key);
-						// now remove the actual key because we're about to symlink it
-						fs.rmdirSync(BIN_DIR + '/' + key);
+						let exists;
+						try {
+							const result = execSync('ls ' + BIN_DIR + '/' + key);
+							exists = result.indexOf('No such file or directory');
+						} catch (error) {
+							exists = false;
+						} 
+						if (!exists) {
+							//console.log('creating dir', BIN_DIR + "/" + key);		
+							//console.log('result?', result.toString());
+							createDir(BIN_DIR, BIN_DIR + '/' + key);
+							// now remove the actual key because we're about to symlink it
+							fs.rmdirSync(BIN_DIR + '/' + key);
+						}
 	
 						exec('ln -s ' + scriptPath + ' ' + BIN_DIR + '/' + key, () => {
 							exec('chmod +x ' + BIN_DIR + "/" + key, () => {
